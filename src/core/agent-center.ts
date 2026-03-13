@@ -157,6 +157,7 @@ export class AgentCenter {
         }
 
         case 'text':
+          currentAssistantBlocks.push({ type: 'text', text: event.text })
           yield event
           break
 
