@@ -18,6 +18,9 @@ Your one-person Wall Street. Alice is an AI trading agent that gives you your ow
   <img src="docs/images/preview.png" alt="Open Alice Preview" width="720">
 </p>
 
+> [!CAUTION]
+> **Open Alice is experimental software in active development.** Many features and interfaces are incomplete and subject to breaking changes. Do not use this software for live trading with real funds unless you fully understand and accept the risks involved. The authors provide no guarantees of correctness, reliability, or profitability, and accept no liability for financial losses.
+
 ## Features
 
 - **Multi-provider AI** — switch between Claude Code CLI, Vercel AI SDK, and Agent SDK at runtime, no restart needed
