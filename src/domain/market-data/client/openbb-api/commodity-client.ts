@@ -7,6 +7,7 @@
 
 import type { OBBjectResponse } from '../../commodity/types/index'
 import { buildCredentialsHeader } from '../../credential-map'
+import type { CommoditySpotPriceData } from '@traderalice/opentypebb'
 
 export class OpenBBCommodityClient {
   private baseUrl: string
@@ -22,7 +23,7 @@ export class OpenBBCommodityClient {
   // ==================== Price ====================
 
   async getSpotPrices(params: Record<string, unknown>) {
-    return this.request('/price/spot', params)
+    return this.request<CommoditySpotPriceData>('/price/spot', params)
   }
 
   // ==================== PSD ====================

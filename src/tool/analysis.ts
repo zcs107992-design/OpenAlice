@@ -8,7 +8,7 @@
 
 import { tool } from 'ai'
 import { z } from 'zod'
-import type { EquityClientLike, CryptoClientLike, CurrencyClientLike } from '@/domain/market-data/client/types'
+import type { EquityClientLike, CryptoClientLike, CurrencyClientLike, CommodityClientLike } from '@/domain/market-data/client/types'
 import { IndicatorCalculator } from '@/domain/analysis/indicator/calculator'
 import type { IndicatorContext, OhlcvData } from '@/domain/analysis/indicator/types'
 
@@ -37,10 +37,11 @@ function buildStartDate(interval: string): string {
 }
 
 function buildContext(
-  asset: 'equity' | 'crypto' | 'currency',
+  asset: 'equity' | 'crypto' | 'currency' | 'commodity',
   equityClient: EquityClientLike,
   cryptoClient: CryptoClientLike,
   currencyClient: CurrencyClientLike,
+  commodityClient: CommodityClientLike,
 ): IndicatorContext {
   return {
     getHistoricalData: async (symbol, interval) => {
@@ -56,6 +57,9 @@ function buildContext(
           break
         case 'currency':
           raw = await currencyClient.getHistorical({ symbol, start_date, interval })
+          break
+        case 'commodity':
+          raw = await commodityClient.getSpotPrices({ symbol, start_date })
           break
       }
 
@@ -75,12 +79,13 @@ export function createAnalysisTools(
   equityClient: EquityClientLike,
   cryptoClient: CryptoClientLike,
   currencyClient: CurrencyClientLike,
+  commodityClient: CommodityClientLike,
 ) {
   return {
     calculateIndicator: tool({
       description: `Calculate technical indicators for any asset (equity, crypto, currency) using formula expressions.
 
-Asset classes: "equity" for stocks, "crypto" for cryptocurrencies, "currency" for forex pairs.
+Asset classes: "equity" for stocks, "crypto" for cryptocurrencies, "currency" for forex pairs, "commodity" for commodities (gold, oil, etc.).
 
 Data access: CLOSE('AAPL', '1d'), HIGH, LOW, OPEN, VOLUME — args: symbol, interval (e.g. '1d', '1w', '1h').
 Statistics: SMA(data, period), EMA, STDEV, MAX, MIN, SUM, AVERAGE.
@@ -91,15 +96,16 @@ Examples:
   asset="equity":   SMA(CLOSE('AAPL', '1d'), 50)
   asset="crypto":   RSI(CLOSE('BTCUSD', '1d'), 14)
   asset="currency": CLOSE('EURUSD', '1d')[-1]
+  asset="commodity": SMA(CLOSE('GC=F', '1d'), 20)   (gold futures)
 
 Use the corresponding search tool first to resolve the correct symbol.`,
       inputSchema: z.object({
-        asset: z.enum(['equity', 'crypto', 'currency']).describe('Asset class'),
+        asset: z.enum(['equity', 'crypto', 'currency', 'commodity']).describe('Asset class'),
         formula: z.string().describe("Formula expression, e.g. SMA(CLOSE('AAPL', '1d'), 50)"),
         precision: z.number().int().min(0).max(10).optional().describe('Decimal places (default: 4)'),
       }),
       execute: async ({ asset, formula, precision }) => {
-        const context = buildContext(asset, equityClient, cryptoClient, currencyClient)
+        const context = buildContext(asset, equityClient, cryptoClient, currencyClient, commodityClient)
         const calculator = new IndicatorCalculator(context)
         return await calculator.calculate(formula, precision)
       },

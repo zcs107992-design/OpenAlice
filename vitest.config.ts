@@ -22,7 +22,7 @@ export default defineConfig({
           name: 'node',
           environment: 'node',
           include: ['src/**/*.spec.*', 'packages/**/*.spec.*'],
-          exclude: ['**/*.e2e.spec.*', '**/node_modules/**'],
+          exclude: ['**/*.e2e.spec.*', '**/*.bbProvider.spec.*', '**/node_modules/**'],
         },
       },
       {

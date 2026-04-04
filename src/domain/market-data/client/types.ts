@@ -25,6 +25,8 @@ import type {
   // Derivatives
   FuturesHistoricalData, FuturesCurveData, FuturesInfoData, FuturesInstrumentsData,
   OptionsChainsData, OptionsSnapshotsData, OptionsUnusualData,
+  // Commodity
+  CommoditySpotPriceData,
 } from '@traderalice/opentypebb'
 
 export interface EquityClientLike {
@@ -73,6 +75,10 @@ export interface IndexClientLike {
   getSectors(params: Record<string, unknown>): Promise<IndexSectorsData[]>
   getSP500Multiples(params?: Record<string, unknown>): Promise<SP500MultiplesData[]>
   getRiskPremium(params?: Record<string, unknown>): Promise<RiskPremiumData[]>
+}
+
+export interface CommodityClientLike {
+  getSpotPrices(params: Record<string, unknown>): Promise<CommoditySpotPriceData[]>
 }
 
 export interface DerivativesClientLike {
