@@ -21,6 +21,7 @@ export interface SnapshotService {
   takeSnapshot(accountId: string, trigger: SnapshotTrigger): Promise<UTASnapshot | null>
   takeAllSnapshots(trigger: SnapshotTrigger): Promise<void>
   getRecent(accountId: string, limit?: number): Promise<UTASnapshot[]>
+  deleteSnapshot(accountId: string, timestamp: string): Promise<boolean>
 }
 
 export function createSnapshotService(deps: {
@@ -102,6 +103,10 @@ export function createSnapshotService(deps: {
 
     async getRecent(accountId, limit = 10) {
       return getStore(accountId).readRange({ limit })
+    },
+
+    async deleteSnapshot(accountId, timestamp) {
+      return getStore(accountId).deleteByTimestamp(timestamp)
     },
   }
 }

@@ -463,6 +463,7 @@ describe('Snapshot Scheduler', () => {
       takeSnapshot: vi.fn(async () => null),
       takeAllSnapshots: vi.fn(async () => {}),
       getRecent: vi.fn(async () => []),
+      deleteSnapshot: vi.fn(async () => false),
     }
 
     scheduler = createSnapshotScheduler({

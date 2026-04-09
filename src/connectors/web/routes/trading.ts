@@ -204,6 +204,15 @@ export function createTradingRoutes(ctx: EngineContext) {
     }
   })
 
+  app.delete('/accounts/:id/snapshots/:timestamp', async (c) => {
+    if (!ctx.snapshotService) return c.json({ error: 'Snapshot service not available' }, 503)
+    const id = c.req.param('id')
+    const timestamp = decodeURIComponent(c.req.param('timestamp'))
+    const deleted = await ctx.snapshotService.deleteSnapshot(id, timestamp)
+    if (!deleted) return c.json({ error: 'Snapshot not found' }, 404)
+    return c.json({ success: true })
+  })
+
   // Aggregated equity curve across all accounts
   app.get('/snapshots/equity-curve', async (c) => {
     if (!ctx.snapshotService) return c.json({ points: [] })

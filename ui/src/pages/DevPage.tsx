@@ -14,15 +14,17 @@ import {
   type ToolDetail,
   type ExecuteResult,
 } from '../api/tools'
+import { api, type UTASnapshotSummary } from '../api'
 
 // ==================== Tab Types ====================
 
-type Tab = 'connectors' | 'tools' | 'sessions'
+type Tab = 'connectors' | 'tools' | 'sessions' | 'snapshots'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'connectors', label: 'Connectors' },
   { key: 'tools', label: 'Tools' },
   { key: 'sessions', label: 'Sessions' },
+  { key: 'snapshots', label: 'Snapshots' },
 ]
 
 // ==================== DevPage ====================
@@ -61,6 +63,7 @@ export function DevPage() {
         {tab === 'connectors' && <ConnectorsTab />}
         {tab === 'tools' && <ToolsTab />}
         {tab === 'sessions' && <SessionsTab />}
+        {tab === 'snapshots' && <SnapshotsTab />}
       </div>
     </div>
   )
@@ -294,6 +297,217 @@ function SessionsSection() {
         </table>
       )}
     </Section>
+  )
+}
+
+// ==================== Snapshots Tab ====================
+
+function SnapshotsTab() {
+  const toast = useToast()
+  const [accounts, setAccounts] = useState<Array<{ id: string; label: string }>>([])
+  const [selectedAccount, setSelectedAccount] = useState<string>('')
+  const [snapshots, setSnapshots] = useState<UTASnapshotSummary[]>([])
+  const [loading, setLoading] = useState(false)
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+
+  // Load accounts list
+  useEffect(() => {
+    api.trading.listAccounts().then(r => {
+      const list = r.accounts.map(a => ({ id: a.id, label: a.label }))
+      setAccounts(list)
+      if (list.length > 0 && !selectedAccount) setSelectedAccount(list[0].id)
+    }).catch(() => {})
+  }, [])
+
+  // Load snapshots when account changes
+  const loadSnapshots = useCallback(async () => {
+    if (!selectedAccount) return
+    setLoading(true)
+    setExpandedIdx(null)
+    try {
+      const r = await api.trading.snapshots(selectedAccount, { limit: 200 })
+      setSnapshots(r.snapshots)
+    } catch {
+      setSnapshots([])
+    }
+    setLoading(false)
+  }, [selectedAccount])
+
+  useEffect(() => { loadSnapshots() }, [loadSnapshots])
+
+  const handleDelete = async (timestamp: string) => {
+    try {
+      await api.trading.deleteSnapshot(selectedAccount, timestamp)
+      toast.success('Snapshot deleted')
+      setExpandedIdx(null)
+      await loadSnapshots()
+    } catch {
+      toast.error('Failed to delete snapshot')
+    }
+  }
+
+  return (
+    <div className="px-4 md:px-6 py-5">
+      <div className="max-w-[900px] space-y-4">
+        {/* Account selector */}
+        <div className="flex items-center gap-3">
+          <label className="text-[13px] text-text-muted">Account:</label>
+          <select
+            value={selectedAccount}
+            onChange={e => setSelectedAccount(e.target.value)}
+            className="text-[13px] px-2 py-1.5 rounded-md border border-border bg-bg text-text"
+          >
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>{a.label} ({a.id})</option>
+            ))}
+          </select>
+          <button
+            onClick={loadSnapshots}
+            className="text-[13px] px-2.5 py-1.5 rounded-md border border-border hover:bg-bg-tertiary transition-colors text-text-muted"
+          >
+            Refresh
+          </button>
+          <span className="text-[11px] text-text-muted/50">{snapshots.length} snapshots</span>
+        </div>
+
+        {/* Snapshots table */}
+        {loading ? (
+          <div className="flex justify-center py-10"><Spinner size="sm" /></div>
+        ) : snapshots.length === 0 ? (
+          <EmptyState title="No snapshots for this account." />
+        ) : (
+          <div className="border border-border rounded-lg overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-bg-secondary text-text-muted text-left text-[11px] uppercase tracking-wide">
+                  <th className="px-3 py-2 font-medium">Timestamp</th>
+                  <th className="px-3 py-2 font-medium">Trigger</th>
+                  <th className="px-3 py-2 font-medium text-center">Health</th>
+                  <th className="px-3 py-2 font-medium text-right">Positions</th>
+                  <th className="px-3 py-2 font-medium text-right">Equity</th>
+                  <th className="px-3 py-2 font-medium text-right w-[80px]"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshots.map((s, i) => (
+                  <SnapshotRow
+                    key={s.timestamp}
+                    snapshot={s}
+                    expanded={expandedIdx === i}
+                    onToggle={() => setExpandedIdx(expandedIdx === i ? null : i)}
+                    onDelete={() => handleDelete(s.timestamp)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SnapshotRow({ snapshot: s, expanded, onToggle, onDelete }: {
+  snapshot: UTASnapshotSummary
+  expanded: boolean
+  onToggle: () => void
+  onDelete: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const healthColor = s.health === 'healthy' ? 'bg-green' : s.health === 'degraded' ? 'bg-yellow-400' : 'bg-red'
+
+  return (
+    <>
+      <tr
+        className="border-t border-border hover:bg-bg-tertiary/30 transition-colors cursor-pointer"
+        onClick={onToggle}
+      >
+        <td className="px-3 py-2 font-mono text-[11px] text-text">
+          {new Date(s.timestamp).toLocaleString()}
+        </td>
+        <td className="px-3 py-2">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">{s.trigger}</span>
+        </td>
+        <td className="px-3 py-2 text-center">
+          <div className={`w-2 h-2 rounded-full ${healthColor} mx-auto`} />
+        </td>
+        <td className="px-3 py-2 text-right text-text">{s.positions.length}</td>
+        <td className="px-3 py-2 text-right text-text tabular-nums">
+          ${Number(s.account.netLiquidation).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </td>
+        <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
+          {confirming ? (
+            <div className="flex gap-1 justify-end">
+              <button onClick={onDelete} className="text-[11px] px-2 py-0.5 rounded bg-red/15 text-red hover:bg-red/25 transition-colors">
+                Confirm
+              </button>
+              <button onClick={() => setConfirming(false)} className="text-[11px] px-2 py-0.5 rounded bg-bg-tertiary text-text-muted hover:bg-bg-tertiary/80 transition-colors">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              className="text-[11px] px-2 py-0.5 rounded text-text-muted hover:text-red hover:bg-red/10 transition-colors"
+            >
+              Delete
+            </button>
+          )}
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-t border-border/50">
+          <td colSpan={6} className="px-3 py-3 bg-bg-secondary/50">
+            <div className="space-y-2">
+              {/* Account metrics */}
+              <div className="flex gap-4 text-[11px]">
+                <span className="text-text-muted">Cash: <span className="text-text">${Number(s.account.totalCashValue).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+                <span className="text-text-muted">Unrealized PnL: <span className={Number(s.account.unrealizedPnL) >= 0 ? 'text-green' : 'text-red'}>{Number(s.account.unrealizedPnL) >= 0 ? '+' : ''}${Number(s.account.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+                {s.account.baseCurrency && <span className="text-text-muted">Base: <span className="text-text">{s.account.baseCurrency}</span></span>}
+              </div>
+              {/* Positions detail */}
+              {s.positions.length > 0 && (
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-text-muted text-left">
+                      <th className="pr-3 pb-1 font-medium">Symbol</th>
+                      <th className="pr-3 pb-1 font-medium text-center">Ccy</th>
+                      <th className="pr-3 pb-1 font-medium text-right">Qty</th>
+                      <th className="pr-3 pb-1 font-medium text-right">Avg Cost</th>
+                      <th className="pr-3 pb-1 font-medium text-right">Mkt Price</th>
+                      <th className="pr-3 pb-1 font-medium text-right">Mkt Value</th>
+                      <th className="pr-3 pb-1 font-medium text-right">PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.positions.map((p, j) => {
+                      const sym = p.aliceId.split('|').pop() ?? p.aliceId
+                      const pnl = Number(p.unrealizedPnL)
+                      return (
+                        <tr key={j} className="text-text">
+                          <td className="pr-3 py-0.5 font-medium">{sym}</td>
+                          <td className="pr-3 py-0.5 text-center text-text-muted">{p.currency}</td>
+                          <td className="pr-3 py-0.5 text-right tabular-nums">{p.quantity}</td>
+                          <td className="pr-3 py-0.5 text-right tabular-nums text-text-muted">{Number(p.avgCost).toFixed(2)}</td>
+                          <td className="pr-3 py-0.5 text-right tabular-nums">{Number(p.marketPrice).toFixed(2)}</td>
+                          <td className="pr-3 py-0.5 text-right tabular-nums">{Number(p.marketValue).toFixed(2)}</td>
+                          <td className={`pr-3 py-0.5 text-right tabular-nums font-medium ${pnl >= 0 ? 'text-green' : 'text-red'}`}>
+                            {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {s.positions.length === 0 && (
+                <p className="text-[11px] text-text-muted">No positions in this snapshot.</p>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 

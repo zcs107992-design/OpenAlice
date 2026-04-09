@@ -15,7 +15,7 @@
  * appends from corrupting the index.
  */
 
-import { readFile, writeFile, appendFile, rename, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, appendFile, rename, mkdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { UTASnapshot, SnapshotIndex } from './types.js'
 
@@ -29,6 +29,7 @@ export interface SnapshotStoreOptions {
 export interface SnapshotStore {
   append(snapshot: UTASnapshot): Promise<void>
   readRange(opts?: { startTime?: string; endTime?: string; limit?: number }): Promise<UTASnapshot[]>
+  deleteByTimestamp(timestamp: string): Promise<boolean>
 }
 
 export function createSnapshotStore(accountId: string, options?: SnapshotStoreOptions): SnapshotStore {
@@ -83,11 +84,56 @@ export function createSnapshotStore(accountId: string, options?: SnapshotStoreOp
     await saveIndex(index)
   }
 
+  async function doDelete(timestamp: string): Promise<boolean> {
+    const index = await readIndex()
+    for (let i = 0; i < index.chunks.length; i++) {
+      const chunk = index.chunks[i]
+      if (timestamp < chunk.startTime || timestamp > chunk.endTime) continue
+
+      const filePath = resolve(dir, chunk.file)
+      const raw = await readFile(filePath, 'utf-8')
+      const lines = raw.trim().split('\n').filter(Boolean)
+      const kept = lines.filter(line => {
+        const snap = JSON.parse(line) as UTASnapshot
+        return snap.timestamp !== timestamp
+      })
+
+      if (kept.length === lines.length) continue // not found in this chunk
+
+      if (kept.length === 0) {
+        // Chunk is empty — remove file and index entry
+        await unlink(filePath).catch(() => {})
+        index.chunks.splice(i, 1)
+      } else {
+        // Rewrite chunk with remaining lines
+        const tmp = `${filePath}.${process.pid}.tmp`
+        await writeFile(tmp, kept.join('\n') + '\n', 'utf-8')
+        await rename(tmp, filePath)
+        // Update index metadata
+        const first = JSON.parse(kept[0]) as UTASnapshot
+        const last = JSON.parse(kept[kept.length - 1]) as UTASnapshot
+        chunk.count = kept.length
+        chunk.startTime = first.timestamp
+        chunk.endTime = last.timestamp
+      }
+
+      await saveIndex(index)
+      return true
+    }
+    return false
+  }
+
   return {
     append(snapshot) {
       const p = writeChain.then(() => doAppend(snapshot))
       // Always advance chain even on error, so next write isn't blocked
       writeChain = p.catch(() => {})
+      return p
+    },
+
+    deleteByTimestamp(timestamp) {
+      const p = writeChain.then(() => doDelete(timestamp))
+      writeChain = p.then(() => {}).catch(() => {})
       return p
     },
 

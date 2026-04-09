@@ -128,6 +128,11 @@ export const tradingApi = {
     return fetchJson(`/api/trading/accounts/${accountId}/snapshots?${params}`)
   },
 
+  async deleteSnapshot(accountId: string, timestamp: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/trading/accounts/${accountId}/snapshots/${encodeURIComponent(timestamp)}`, { method: 'DELETE' })
+    return res.json()
+  },
+
   async equityCurve(opts?: { startTime?: string; endTime?: string; limit?: number }): Promise<{ points: EquityCurvePoint[] }> {
     const params = new URLSearchParams()
     if (opts?.limit) params.set('limit', String(opts.limit))
